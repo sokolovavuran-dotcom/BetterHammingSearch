@@ -21,15 +21,6 @@ def linear_scan_range(codes: np.ndarray, q: np.ndarray, r: int) -> np.ndarray:
     d = hamming_distances(codes, q)
     return np.flatnonzero(d <= r).astype(np.int32)
 
-
-DATASETS = {
-    'sift':      'sift',
-    'siftsmall': 'siftsmall',
-}
-
-DATASETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'datasets')
-
-
 def run_linear_scan(dataset_dir: str, prefix: str, radius: int, query_count: int) -> None:
     # deferred import to avoid circular dependency (dataset.py imports linear_scan_range)
     from dataset import read_fvecs, binarize
@@ -74,17 +65,24 @@ def run_linear_scan(dataset_dir: str, prefix: str, radius: int, query_count: int
 
 
 def main() -> None:
+    datasets = {
+        'sift': 'sift',
+        'siftsmall': 'siftsmall',
+    }
+
+    datasets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'datasets')
+
     ap = argparse.ArgumentParser(description='Linear scan Hamming range query benchmark')
-    ap.add_argument('--dataset', choices=list(DATASETS), default='siftsmall',
-                    help='dataset to use (default: siftsmall)')
-    ap.add_argument('--radius', type=int, default=20,
-                    help='Hamming radius for range query (default: 20)')
+    ap.add_argument('--dataset', choices=list(datasets), default='sift',
+                    help='dataset to use (default: sifts)')
+    ap.add_argument('--radius', type=int, default=5,
+                    help='Hamming radius for range query (default: 5)')
     ap.add_argument('--query_count', type=int, default=100,
                     help='number of queries to run (default: 100)')
     args = ap.parse_args()
 
-    prefix      = DATASETS[args.dataset]
-    dataset_dir = os.path.join(DATASETS_DIR, prefix)
+    prefix      = datasets[args.dataset]
+    dataset_dir = os.path.join(datasets_dir, prefix)
     run_linear_scan(dataset_dir, prefix, args.radius, args.query_count)
 
 

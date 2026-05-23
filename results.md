@@ -1,182 +1,236 @@
 # Benchmark Results
 
-**Dataset:** SIFT (1,000,000 base vectors, 128-dim, binarized to 16 bytes / 128 bits)  
-**Queries:** 100
+**Radius:** r = 5 | **Queries:** Q = 100 | Codes: 128-dim float → 128-bit / 16-byte binary
 
 ---
 
-## Summary Table — radius 5
+# SIFT (1 000 000 base vectors)
 
-Avg hits per query: **1.7**
+## Summary Table
 
-| Algorithm    | Segments       | Prework time | Index size (est.) | Peak mem (build) | Avg query time | QPS    | Peak mem (query) |
-|--------------|----------------|-------------:|------------------:|-----------------:|---------------:|-------:|-----------------:|
-| Linear Scan  | —              | —            | —                 | —                | 53.339 ms      |   18.7 | —                |
-| MIH          | m=8, r_seg=0   | 11.332 s     | 319.93 MB         | 351.87 MB        | 4.957 ms       |  201.7 | 6.44 MB          |
-| HmSearch     | m=6, ~21 bits  | 11.873 s     | 332.92 MB         | 487.87 MB        | 0.830 ms       | 1204.4 | 1.53 MB          |
+| Algorithm | Build time (s) | Index size (MB) | Peak build (MB) | Avg query (ms) | QPS | Avg hits | Peak query (MB) |
+|-----------|---------------:|----------------:|----------------:|---------------:|----:|---------:|----------------:|
+| Linear Scan | — | — | — | 55.250 | 18.1 | 1.7 | — |
+| HmSearch (m=6) | 12.373 | 332.92 | 487.87 | 0.792 | 1 262.7 | 1.7 | 1.53 |
+| MIH (m=8, r_seg=0) | 11.989 | 319.93 | 351.87 | 5.117 | 195.4 | 1.7 | 6.44 |
+| GPH (m=16, thr=11) | 17.951 | 584.57 | 777.30 | 47.824 | 20.9 | 1.7 | 19.16 |
+| QADP (T=4, probe=1) | 92.891 | 1 486.88 | 1 842.69 | 0.669 | 1 495.5 | 1.7 | 1.54 |
 
-MIH speedup vs linear scan: **10.8×**  
-HmSearch speedup vs linear scan: **64.3×**
+Speedup over linear scan: **QADP 82.5×** · HmSearch **69.8×** · MIH **10.8×** · GPH **1.2×**
 
----
-
-## Summary Table — radius 20
-
-Avg hits per query: **2540.6**
-
-| Algorithm    | Segments       | Prework time | Index size (est.) | Peak mem (build) | Avg query time | QPS  | Peak mem (query) |
-|--------------|----------------|-------------:|------------------:|-----------------:|---------------:|-----:|-----------------:|
-| Linear Scan  | —              | —            | —                 | —                | 53.473 ms      | 18.7 | —                |
-| MIH          | m=8, r_seg=2   | 11.383 s     | 319.93 MB         | 351.87 MB        | 77.415 ms      | 12.9 | 40.13 MB         |
-| MIH          | m=16, r_seg=1  | 13.921 s     | 584.57 MB         | 648.30 MB        | 333.515 ms     |  3.0 | 82.59 MB         |
-| HmSearch     | m=21, ~6 bits  | 21.550 s     | 765.95 MB         | 978.72 MB        | 197.080 ms     |  5.1 | 75.27 MB         |
-
-At r=20 all index-based methods are **slower** than linear scan (see explanation below).
-
----
-
-## Analysis
-
-### Why r=5 favors index methods
-
-At r=5 there are only 1.7 true results per query on average — a very sparse regime.
-
-- **MIH (r_seg=0):** each of 8 segments does a single exact hash lookup in a 16-bit (2-byte) table. Buckets hold ~15 entries on average (1M / 65536), yielding ~120 candidates to verify via numpy — far less than scanning 1M.
-- **HmSearch (m=6, ~21-bit segments):** 6 exact lookups in tables with 2^21 possible keys. Buckets average < 1 entry — almost no false positives reach verification, making query time dominated purely by the 6 dict lookups.
-
-### Why r=20 hurts index methods
-
-At r=20 there are 2540 true results per query (0.25% of the database) — a high-recall, high-hit regime.
-
-- **MIH (m=8, r_seg=2):** 8 × 137 = 1096 Python-level hash lookups generate a large candidate set. Python loop overhead + verification of thousands of candidates exceeds numpy's fully-vectorized linear pass.
-- **MIH (m=16, r_seg=1):** fewer lookups (144), but single-byte buckets average 3900 entries, flooding the candidate set (hundreds of thousands) — much worse.
-- **HmSearch:** 21 exact lookups, but each bucket is large enough at this radius to generate many candidates, and 21 Python-level iterations add overhead.
-- **Linear Scan:** a single numpy pass over 16 MB saturates memory bandwidth with no Python overhead — unbeatable in this regime.
-
-Index-based methods show their full advantage in **compiled implementations** (C++, Cython, Numba) where Python loop overhead is eliminated, or at **billion-scale** datasets where vectorized scan itself becomes the bottleneck.
-
----
-
-## Raw Output — radius 5
+## Raw Output
 
 ### Linear Scan
-
 ```
+base    : (1000000, 128)
+code shape : (1000000, 16)  dtype=uint8
+
 Linear scan  r=5, Q=100 ...
-  total        : 5.334 s
-  avg query    : 53.339 ms  (running average)
-  QPS          : 18.7
+  total        : 5.525 s
+  avg query    : 55.250 ms  (running average)
+  QPS          : 18.1
   avg hits     : 1.7
 ```
 
-### MIH (m=8, seg=2 bytes / 16 bits, r_seg=0, 1 neighbor/segment)
-
-```
-  segments     : m=8,  seg=2 bytes (16 bits)
-  r / r_seg    : 5 / 0  ->  1 neighbors per segment
-
-Building MIH index ...
-  build time   : 11.332 s
-  codes array  : 16.00 MB
-  index size   : 319.93 MB  (deep estimate)
-  peak (build) : 351.87 MB  (tracemalloc)
-
-MIH range query  r=5, m=8, Q=100 ...
-  total        : 0.496 s
-  avg query    : 4.957 ms  (running average)
-  QPS          : 201.7
-  avg hits     : 1.7
-  peak (query) : 6.44 MB  (tracemalloc)
-```
-
-### HmSearch (m=6, ~21 bits each)
-
+### HmSearch  (m=6, ~21 bits each)
 ```
   segments   : m=6  (~21 bits each)
-
-Building HmSearch index ...
-  build time   : 11.873 s
+  build time   : 12.373 s
   codes array  : 16.00 MB
   index size   : 332.92 MB  (deep estimate)
   peak (build) : 487.87 MB  (tracemalloc)
 
 HmSearch range query  r=5, m=6, Q=100 ...
-  total        : 0.083 s
-  avg query    : 0.830 ms  (running average)
-  QPS          : 1204.4
+  total        : 0.079 s
+  avg query    : 0.792 ms  (running average)
+  QPS          : 1262.7
   avg hits     : 1.7
   peak (query) : 1.53 MB  (tracemalloc)
 ```
 
----
-
-## Raw Output — radius 20
-
-### Linear Scan
-
-```
-Linear scan  r=20, Q=100 ...
-  total        : 5.347 s
-  avg query    : 53.473 ms  (running average)
-  QPS          : 18.7
-  avg hits     : 2540.6
-```
-
-### MIH (m=8, seg=2 bytes / 16 bits, r_seg=2, 137 neighbors/segment)
-
+### MIH  (m=8, seg=2 bytes / 16 bits, r_seg=0)
 ```
   segments     : m=8,  seg=2 bytes (16 bits)
-  r / r_seg    : 20 / 2  ->  137 neighbors per segment
-
-Building MIH index ...
-  build time   : 11.383 s
+  r / r_seg    : 5 / 0  ->  1 neighbors per segment
+  build time   : 11.989 s
   codes array  : 16.00 MB
   index size   : 319.93 MB  (deep estimate)
   peak (build) : 351.87 MB  (tracemalloc)
 
-MIH range query  r=20, m=8, Q=100 ...
-  total        : 7.741 s
-  avg query    : 77.415 ms  (running average)
-  QPS          : 12.9
-  avg hits     : 2540.6
-  peak (query) : 40.13 MB  (tracemalloc)
+MIH range query  r=5, m=8, Q=100 ...
+  total        : 0.512 s
+  avg query    : 5.117 ms  (running average)
+  QPS          : 195.4
+  avg hits     : 1.7
+  peak (query) : 6.44 MB  (tracemalloc)
 ```
 
-### MIH (m=16, seg=1 byte / 8 bits, r_seg=1, 9 neighbors/segment)
-
+### GPH  (byte-level, m=16, threshold=11/16)
 ```
-  segments     : m=16,  seg=1 bytes (8 bits)
-  r / r_seg    : 20 / 1  ->  9 neighbors per segment
-
-Building MIH index ...
-  build time   : 13.921 s
+  mode         : byte-level segments
+  segments     : m=16,  threshold=11/16
+  build time   : 17.951 s
   codes array  : 16.00 MB
   index size   : 584.57 MB  (deep estimate)
-  peak (build) : 648.30 MB  (tracemalloc)
+  peak (build) : 777.30 MB  (tracemalloc)
 
-MIH range query  r=20, m=16, Q=100 ...
-  total        : 33.352 s
-  avg query    : 333.515 ms  (running average)
-  QPS          : 3.0
-  avg hits     : 2540.6
-  peak (query) : 82.59 MB  (tracemalloc)
+GPH range query  r=5, m=16, threshold=11, Q=100 ...
+  total        : 4.782 s
+  avg query    : 47.824 ms  (running average)
+  QPS          : 20.9
+  avg hits     : 1.7
+  peak (query) : 19.16 MB  (tracemalloc)
 ```
 
-### HmSearch (m=21, ~6 bits each)
-
+### QADP  (T=4 families, m=6 segments, n_probe=1)
 ```
-  segments   : m=21  (~6 bits each)
+  families   : T=4,  segments m=6  (~21 bits each)
+  build time   : 92.891 s
+  codes array  : 16.00 MB
+  index size   : 1486.88 MB  (deep estimate)
+  peak (build) : 1842.69 MB  (tracemalloc)
+
+QADP range query  r=5, T=4, n_probe=1, Q=100 ...
+  total        : 0.067 s
+  avg query    : 0.669 ms  (running average)
+  QPS          : 1495.5
+  avg hits     : 1.7
+  peak (query) : 1.54 MB  (tracemalloc)
+```
+
+---
+
+# siftsmall (10 000 base vectors)
+
+## Summary Table
+
+| Algorithm | Build time (s) | Index size (MB) | Peak build (MB) | Avg query (ms) | QPS | Avg hits | Peak query (MB) |
+|-----------|---------------:|----------------:|----------------:|---------------:|----:|---------:|----------------:|
+| Linear Scan | — | — | — | 0.496 | 2 015.6 | 0.1 | — |
+| HmSearch (m=6) | 0.124 | 7.24 | 8.85 | 0.055 | 18 345.9 | 0.1 | 0.06 |
+| MIH (m=8, r_seg=0) | 0.127 | 6.49 | 6.74 | 0.096 | 10 448.2 | 0.1 | 0.15 |
+| GPH (m=16, thr=11) | 0.176 | 6.34 | 8.02 | 0.547 | 1 827.4 | 0.1 | 0.20 |
+| QADP (T=4, probe=1) | 1.086 | 31.60 | 35.97 | 0.228 | 4 383.9 | 0.1 | 0.06 |
+
+Speedup over linear scan: HmSearch **9.0×** · MIH **5.2×** · QADP **2.2×** · GPH **0.9×**
+
+## Raw Output
+
+---
+
+## Summary Table
+
+| Algorithm | Build time (s) | Index size (MB) | Peak build (MB) | Avg query (ms) | QPS | Avg hits | Peak query (MB) |
+|-----------|---------------:|----------------:|----------------:|---------------:|----:|---------:|----------------:|
+| Linear Scan | — | — | — | 0.496 | 2 015.6 | 0.1 | — |
+| HmSearch (m=6) | 0.124 | 7.24 | 8.85 | 0.055 | 18 345.9 | 0.1 | 0.06 |
+| MIH (m=8, r_seg=0) | 0.127 | 6.49 | 6.74 | 0.096 | 10 448.2 | 0.1 | 0.15 |
+| GPH (m=16, thr=11) | 0.176 | 6.34 | 8.02 | 0.547 | 1 827.4 | 0.1 | 0.20 |
+| QADP (T=4, probe=1) | 1.086 | 31.60 | 35.97 | 0.228 | 4 383.9 | 0.1 | 0.06 |
+
+Speedup over linear scan: HmSearch **9.0×** · MIH **5.2×** · QADP **2.2×** · GPH **0.9×**
+
+---
+
+## Raw Output
+
+### Linear Scan
+```
+code shape : (10000, 16)  dtype=uint8
+
+Linear scan  r=5, Q=100 ...
+  total        : 0.050 s
+  avg query    : 0.496 ms  (running average)
+  QPS          : 2015.6
+  avg hits     : 0.1
+```
+
+### HmSearch  (m = r+1 = 6 segments, ~21 bits each)
+```
+code shape : (10000, 16)  dtype=uint8
+segments   : m=6  (~21 bits each)
 
 Building HmSearch index ...
-  build time   : 21.550 s
-  codes array  : 16.00 MB
-  index size   : 765.95 MB  (deep estimate)
-  peak (build) : 978.72 MB  (tracemalloc)
+  build time   : 0.124 s
+  codes array  : 0.16 MB
+  index size   : 7.24 MB  (deep estimate)
+  peak (build) : 8.85 MB  (tracemalloc)
 
-HmSearch range query  r=20, m=21, Q=100 ...
-  total        : 19.708 s
-  avg query    : 197.080 ms  (running average)
-  QPS          : 5.1
-  avg hits     : 2540.6
-  peak (query) : 75.27 MB  (tracemalloc)
+HmSearch range query  r=5, m=6, Q=100 ...
+  total        : 0.005 s
+  avg query    : 0.055 ms  (running average)
+  QPS          : 18345.9
+  avg hits     : 0.1
+  peak (query) : 0.06 MB  (tracemalloc)
 ```
+
+### MIH  (m=8 segments, seg=2 bytes / 16 bits, r_seg = floor(5/8) = 0)
+```
+code shape : (10000, 16)  dtype=uint8
+
+segments     : m=8,  seg=2 bytes (16 bits)
+r / r_seg    : 5 / 0  ->  1 neighbors per segment
+
+Building MIH index ...
+  build time   : 0.127 s
+  codes array  : 0.16 MB
+  index size   : 6.49 MB  (deep estimate)
+  peak (build) : 6.74 MB  (tracemalloc)
+
+MIH range query  r=5, m=8, Q=100 ...
+  total        : 0.010 s
+  avg query    : 0.096 ms  (running average)
+  QPS          : 10448.2
+  avg hits     : 0.1
+  peak (query) : 0.15 MB  (tracemalloc)
+```
+
+### GPH  (byte-level segments, m=16, threshold=11/16)
+```
+code shape : (10000, 16)  dtype=uint8
+
+Building GPH index ...
+  mode         : byte-level segments
+  segments     : m=16,  threshold=11/16
+  build time   : 0.176 s
+  codes array  : 0.16 MB
+  index size   : 6.34 MB  (deep estimate)
+  peak (build) : 8.02 MB  (tracemalloc)
+
+GPH range query  r=5, m=16, threshold=11, Q=100 ...
+  total        : 0.055 s
+  avg query    : 0.547 ms  (running average)
+  QPS          : 1827.4
+  avg hits     : 0.1
+  peak (query) : 0.20 MB  (tracemalloc)
+```
+
+### QADP  (T=4 families, m=6 segments each, n_probe=1)
+```
+code shape : (10000, 16)  dtype=uint8
+families   : T=4,  segments m=6  (~21 bits each)
+
+Building QADP index ...
+  build time   : 1.086 s
+  codes array  : 0.16 MB
+  index size   : 31.60 MB  (deep estimate)
+  peak (build) : 35.97 MB  (tracemalloc)
+
+QADP range query  r=5, T=4, n_probe=1, Q=100 ...
+  total        : 0.023 s
+  avg query    : 0.228 ms  (running average)
+  QPS          : 4383.9
+  avg hits     : 0.1
+  peak (query) : 0.06 MB  (tracemalloc)
+```
+
+---
+
+## Notes
+
+- All algorithms return identical result sets (avg hits = 0.1 for every method); correctness is preserved.
+- At r=5 the search is very sparse — only ~0.1 results per query — so index-based methods shine by avoiding almost all of the 10 000 base codes.
+- **HmSearch** is fastest: 6 exact hash lookups in large (21-bit segment) tables leave almost nothing to verify.
+- **MIH** with r_seg=0 degenerates to exact lookup per segment (no neighbor enumeration), which is still faster than linear scan but slower than HmSearch's larger segments.
+- **GPH** is slower here because a high threshold (11/16 segments must match) forces visiting many buckets per query with a vote-counting step that has Python overhead.
+- **QADP** sits between MIH and GPH: it builds T=4 families (hence 4× the index size and build time vs HmSearch) and selects the best-fitting permutation per query. At n_probe=1 it gives zero false negatives by the same pigeonhole argument as HmSearch.

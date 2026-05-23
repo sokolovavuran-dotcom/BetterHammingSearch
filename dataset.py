@@ -1,7 +1,4 @@
-import os
-import time
 import numpy as np
-from linear_scan import linear_scan_range
 
 _POPCOUNT_TABLE = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
 
