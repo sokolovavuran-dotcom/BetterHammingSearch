@@ -142,23 +142,47 @@ def sp_nc_query(
             timers['2c_accumulate'] += time.perf_counter() - t_acc
 
         t_prune = time.perf_counter()
-        # Priority 1 — cumulative H already exceeds r (Anti-pigeonhole pruning)
-        exceed = Hc_a > r
+        # Priority 1 — cumulative H already exceeds r (anti-pigeonhole pruning).
+        # Vectors hit by this priority are removed from M and skipped for P2/P3.
+        exceed_mask = Hc_a > r
+        if exceed_mask.any():
+            in_M[active[exceed_mask]] = False
+            keep = ~exceed_mask
+            if not keep.any():
+                if use_timers:
+                    timers['2d_prune_masks'] += time.perf_counter() - t_prune
+                continue
+            # Narrow working arrays to vectors not yet classified
+            active = active[keep]
+            Hc_a   = Hc_a[keep]
+            Bc_a   = Bc_a[keep]
+            h_sub  = h_sub[keep]
 
-        # Priority 2 — enough dimensions sampled: decide via estimated H
-        not_exceed = ~exceed
-        enough = not_exceed & (Bc_a >= l)
-        enough_idx = active[enough]
-        if enough_idx.size:
-            est = d / Bc[enough_idx] * Hc[enough_idx]
-            R.extend(enough_idx[est <= r].tolist())
+        # Priority 2 — enough dims sampled: estimate H and decide.
+        # Only evaluated on the survivors of P1.
+        enough_mask = Bc_a >= l
+        if enough_mask.any():
+            eidx = active[enough_mask]
+            est = (d / Bc_a[enough_mask]) * Hc_a[enough_mask]
+            R.extend(eidx[est <= r].tolist())
+            in_M[eidx] = False
+            keep = ~enough_mask
+            if not keep.any():
+                if use_timers:
+                    timers['2d_prune_masks'] += time.perf_counter() - t_prune
+                continue
+            active = active[keep]
+            h_sub  = h_sub[keep]
+            # (Hc_a, Bc_a no longer needed past this point)
 
-        # Priority 3 — Pigeonhole: H in this subspace <= local threshold 1
-        pigeon = not_exceed & (Bc_a < l) & (h_sub <= 1)
-        in_C[active[pigeon]] = True
-
-        # Remove from M all resolved entries
-        in_M[active[exceed | enough | pigeon]] = False
+        # Priority 3 — Pigeonhole: h_sub <= 1 in this subspace ⇒ candidate.
+        # Only evaluated on the survivors of P1 and P2.
+        pigeon_mask = h_sub <= 1
+        if pigeon_mask.any():
+            pidx = active[pigeon_mask]
+            in_C[pidx] = True
+            in_M[pidx] = False
+        # Vectors not matched by any priority stay in M for the next subspace.
         if use_timers:
             timers['2d_prune_masks'] += time.perf_counter() - t_prune
 
