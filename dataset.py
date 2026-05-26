@@ -1,6 +1,12 @@
+import os
 import numpy as np
 
-_POPCOUNT_TABLE = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
+datasets = {
+    'sift': 'sift',
+    'siftsmall': 'siftsmall',
+}
+
+datasets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'datasets')
 
 
 def read_fvecs(path: str) -> np.ndarray:
@@ -10,9 +16,20 @@ def read_fvecs(path: str) -> np.ndarray:
     return data.reshape(-1, 1 + d)[:, 1:].view(np.float32)
 
 
-def binarize(X: np.ndarray, thresholds: np.ndarray = None) -> np.ndarray:
-    """Threshold each dimension; pack 8 bits per byte -> (N, D/8) uint8."""
-    if thresholds is None:
-        thresholds = X.mean(axis=0)
-    bits = (X > thresholds).astype(np.uint8)
+def binarize(X: np.ndarray, seed: int = 0) -> np.ndarray:
+    """Gaussian Random Projection binarization.
+
+    Projects X onto n_bits random hyperplanes drawn from N(0,1) and thresholds
+    at 0. The projection matrix is generated deterministically from (D, n_bits, seed)
+    so calling binarize on base and queries with the same arguments yields codes
+    in the same Hamming space.
+
+    X      : (N, D) float array
+    seed   : RNG seed for the projection matrix
+    returns: (N, n_bits//8) uint8 packed binary codes
+    """
+    N, D = X.shape
+    n_bits = D
+    R = np.random.default_rng(seed).standard_normal((D, n_bits)).astype(np.float32)
+    bits = (X @ R > 0).astype(np.uint8)
     return np.packbits(bits, axis=1)

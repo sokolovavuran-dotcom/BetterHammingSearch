@@ -108,9 +108,8 @@ def run_mih(dataset_dir: str, prefix: str, radius: int, m: int, query_count: int
     print(f"  queries : {queries.shape}")
 
     print("Binarizing ...")
-    mean        = base.mean(axis=0)
-    base_codes  = binarize(base, mean)
-    query_codes = binarize(queries, mean)
+    base_codes  = binarize(base)
+    query_codes = binarize(queries)
     D = base_codes.shape[1]
     print(f"  code shape : {base_codes.shape}  dtype={base_codes.dtype}")
 
@@ -183,8 +182,8 @@ def main() -> None:
         help='dataset to use (default: siftsmall)',
     )
     ap.add_argument(
-        '--radius', type=int, default=20,
-        help='Hamming radius for range query (default: 20)',
+        '--radius', type=int, default=16,
+        help='Hamming radius for range query (default: 16)',
     )
     ap.add_argument(
         '--segments', type=int, default=8,

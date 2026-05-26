@@ -1,6 +1,7 @@
 import os
 import time
 import argparse
+import random
 import numpy as np
 
 _POPCOUNT_TABLE = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
@@ -21,26 +22,27 @@ def linear_scan_range(codes: np.ndarray, q: np.ndarray, r: int) -> np.ndarray:
     d = hamming_distances(codes, q)
     return np.flatnonzero(d <= r).astype(np.int32)
 
-def run_linear_scan(dataset_dir: str, prefix: str, radius: int, query_count: int) -> None:
-    # deferred import to avoid circular dependency (dataset.py imports linear_scan_range)
+def run_linear_scan(dataset_dir: str, dataset: str, radius: int, query_count: int, seed: int = None) -> None:
     from dataset import read_fvecs, binarize
 
-    base_path  = os.path.join(dataset_dir, f'{prefix}_base.fvecs')
-    query_path = os.path.join(dataset_dir, f'{prefix}_query.fvecs')
+    if seed is None:
+        seed = random.randint(0, 2**32 - 1)
+
+    base_path  = os.path.join(dataset_dir, f'{dataset}_base.fvecs')
+    query_path = os.path.join(dataset_dir, f'{dataset}_query.fvecs')
 
     if not os.path.exists(base_path):
         raise FileNotFoundError(f"Dataset not found: {base_path}")
 
-    print(f"Loading {prefix} ...")
+    print(f"Loading {dataset} ...")
     base    = read_fvecs(base_path)
     queries = read_fvecs(query_path)
     print(f"  base    : {base.shape}")
     print(f"  queries : {queries.shape}")
 
-    print("Binarizing ...")
-    mean        = base.mean(axis=0)
-    base_codes  = binarize(base, mean)
-    query_codes = binarize(queries, mean)
+    print(f"Binarizing  (GRP seed={seed}) ...")
+    base_codes  = binarize(base, seed=seed)
+    query_codes = binarize(queries, seed=seed)
     print(f"  code shape : {base_codes.shape}  dtype={base_codes.dtype}")
 
     Q = min(query_count, len(query_codes))
@@ -65,25 +67,22 @@ def run_linear_scan(dataset_dir: str, prefix: str, radius: int, query_count: int
 
 
 def main() -> None:
-    datasets = {
-        'sift': 'sift',
-        'siftsmall': 'siftsmall',
-    }
-
-    datasets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'datasets')
+    from dataset import datasets, datasets_dir
 
     ap = argparse.ArgumentParser(description='Linear scan Hamming range query benchmark')
     ap.add_argument('--dataset', choices=list(datasets), default='sift',
                     help='dataset to use (default: sifts)')
-    ap.add_argument('--radius', type=int, default=5,
-                    help='Hamming radius for range query (default: 5)')
+    ap.add_argument('--radius', type=int, default=16,
+                    help='Hamming radius for range query (default: 16)')
     ap.add_argument('--query_count', type=int, default=100,
                     help='number of queries to run (default: 100)')
+    ap.add_argument('--seed', type=int, default=None,
+                    help='RNG seed for GRP projection matrix (default: random)')
     args = ap.parse_args()
 
-    prefix      = datasets[args.dataset]
-    dataset_dir = os.path.join(datasets_dir, prefix)
-    run_linear_scan(dataset_dir, prefix, args.radius, args.query_count)
+    dataset      = datasets[args.dataset]
+    dataset_dir = os.path.join(datasets_dir, dataset)
+    run_linear_scan(dataset_dir, dataset, args.radius, args.query_count, args.seed)
 
 
 if __name__ == '__main__':

@@ -124,9 +124,8 @@ def run_gph(dataset_dir: str, prefix: str, radius: int, query_count: int) -> Non
     print(f"  queries : {queries.shape}")
 
     print("Binarizing ...")
-    mean        = base.mean(axis=0)
-    base_codes  = binarize(base, mean)
-    query_codes = binarize(queries, mean)
+    base_codes  = binarize(base)
+    query_codes = binarize(queries)
     D = base_codes.shape[1]
     print(f"  code shape : {base_codes.shape}  dtype={base_codes.dtype}")
 
