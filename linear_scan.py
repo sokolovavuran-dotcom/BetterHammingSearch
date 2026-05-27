@@ -71,7 +71,7 @@ def main() -> None:
 
     ap = argparse.ArgumentParser(description='Linear scan Hamming range query benchmark')
     ap.add_argument('--dataset', choices=list(datasets), default='sift',
-                    help='dataset to use (default: sifts)')
+                    help='dataset to use (default: sift)')
     ap.add_argument('--radius', type=int, default=16,
                     help='Hamming radius for range query (default: 16)')
     ap.add_argument('--query_count', type=int, default=100,
