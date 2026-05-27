@@ -178,8 +178,8 @@ def main() -> None:
         description='Multi-Index Hashing Hamming range query benchmark'
     )
     ap.add_argument(
-        '--dataset', choices=list(DATASETS), default='siftsmall',
-        help='dataset to use (default: siftsmall)',
+        '--dataset', choices=list(DATASETS), default='sift',
+        help='dataset to use (default: sift)',
     )
     ap.add_argument(
         '--radius', type=int, default=16,

@@ -4,6 +4,8 @@ import numpy as np
 datasets = {
     'sift': 'sift',
     'siftsmall': 'siftsmall',
+    'sift_half': 'sift_half',         # first 500k of sift1M (see make_sift_subsets.py)
+    'sift_quarter': 'sift_quarter',   # first 250k of sift1M
 }
 
 datasets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'datasets')

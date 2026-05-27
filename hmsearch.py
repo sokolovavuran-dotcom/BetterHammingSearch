@@ -82,8 +82,10 @@ def _index_size_bytes(tables: list) -> int:
 
 
 DATASETS = {
-    'sift':      'sift',
-    'siftsmall': 'siftsmall',
+    'sift':         'sift',
+    'siftsmall':    'siftsmall',
+    'sift_half':    'sift_half',       # 500k subset (see make_sift_subsets.py)
+    'sift_quarter': 'sift_quarter',    # 250k subset
 }
 
 DATASETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'datasets')
@@ -102,10 +104,13 @@ def run_hmsearch(dataset_dir: str, prefix: str, radius: int, query_count: int) -
     print(f"  base    : {base.shape}")
     print(f"  queries : {queries.shape}")
 
-    print("Binarizing ...")
-    mean        = base.mean(axis=0)
-    base_codes  = binarize(base, mean)
-    query_codes = binarize(queries, mean)
+    print("Binarizing  (GRP seed=0) ...")
+    # binarize() takes (X, seed=0) — it builds a Gaussian random-projection
+    # matrix from the seed.  Using the same seed for base and queries puts them
+    # in the same Hamming space, which is what every other benchmark in this
+    # repo does (see linear_scan.py, qadp_normal.py, mih.py).
+    base_codes  = binarize(base, seed=0)
+    query_codes = binarize(queries, seed=0)
     n_bits = base_codes.shape[1] * 8
     m = radius + 1
     print(f"  code shape : {base_codes.shape}  dtype={base_codes.dtype}")
@@ -155,8 +160,8 @@ def run_hmsearch(dataset_dir: str, prefix: str, radius: int, query_count: int) -
 
 def main() -> None:
     ap = argparse.ArgumentParser(description='HmSearch Hamming range query benchmark')
-    ap.add_argument('--dataset', choices=list(DATASETS), default='siftsmall',
-                    help='dataset to use (default: siftsmall)')
+    ap.add_argument('--dataset', choices=list(DATASETS), default='sift',
+                    help='dataset to use (default: sift)')
     ap.add_argument('--radius', type=int, default=20,
                     help='Hamming radius for range query (default: 20)')
     ap.add_argument('--query_count', type=int, default=100,

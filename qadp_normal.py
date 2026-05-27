@@ -227,7 +227,12 @@ def sp_nc_query(
 
 # ── Benchmark ──────────────────────────────────────────────────────────────────
 
-DATASETS = {'sift': 'sift', 'siftsmall': 'siftsmall'}
+DATASETS = {
+    'sift': 'sift',
+    'siftsmall': 'siftsmall',
+    'sift_half': 'sift_half',          # 500k subset (see make_sift_subsets.py)
+    'sift_quarter': 'sift_quarter',    # 250k subset
+}
 DATASETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'datasets')
 
 
